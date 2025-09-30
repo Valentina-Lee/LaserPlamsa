@@ -97,9 +97,9 @@ class Pulse(beam.Beam):
             The array of field values to initialize the field to.
         """
         if e is None:
-            self.e = np.zeros((self.Nt, self.Nx, self.Ny,), dtype='complex128')
+            self.e = np.zeros((self.Nt, self.Nx, self.Ny,), dtype='complex64')
         else:
-            self.e = np.array(e, dtype='complex128')
+            self.e = np.array(e, dtype='complex64')
         self.saveInd = 0
         self.z = []
         self.save_field(self.e, 0.0)
@@ -114,7 +114,7 @@ class Pulse(beam.Beam):
             The array of field values to initialize the field to.
         """
 
-        self.e = np.array(beam.e[None, :, :]*gaussian.temporal_gaussian_envelope(pulse.t, tau*1e15)[:, None, None], dtype='complex128')
+        self.e = np.array(beam.e[None, :, :]*gaussian.temporal_gaussian_envelope(pulse.t, tau*1e15)[:, None, None], dtype='complex64')
         self.saveInd = 0
         self.z = []
         self.save_field(self.e, 0.0)
@@ -128,7 +128,7 @@ class Pulse(beam.Beam):
         if not self.cyl:
             self.e = e
         else:
-            self.e = np.zeros((self.Nt, self.Nx, self.Ny,), dtype='complex128')
+            self.e = np.zeros((self.Nt, self.Nx, self.Ny,), dtype='complex64')
             x = self.x
             y = self.y
             for i in range(self.Nt):
@@ -144,18 +144,10 @@ class Pulse(beam.Beam):
         norm = np.sum(np.abs(self.e)**2) * dx * dy * dt
         prefactor = (n0 * constants.epsilon_0 * constants.c / 2)
         E0 = np.sqrt(J / (prefactor * norm))
-        self.e= E0* self.e *10**(4.5)
-    
+        self.e= (E0* self.e *10**(4.5)).astype(np.complex64)
+
     def resize_beam(self, new_X, new_Y, new_Nx, new_Ny):
-        temp_Nx= (new_X/self.X)*self.Nx
-        temp_Ny= (new_Y/self.Y)*self.Ny
-        assert temp_Nx.is_integer(), 'New X need to be an integer times old x gird size'
-        assert temp_Ny.is_integer(), 'New Y need to be an integer times old x gird size'
-        start_x= (self.Nx-temp_Nx)//2
-        end_x= start_x+ temp_Nx
-        start_y= (self.Ny-temp_Ny)//2
-        end_y= start_y+ temp_Ny
-        self.e= self.e[:, int(start_x):int(end_x), int(start_y):int(end_y)]
+        e_list= []
         self.X= new_X
         self.Y= new_Y
         self.Nx= new_Nx
@@ -163,24 +155,20 @@ class Pulse(beam.Beam):
         old_x= self.x
         old_y= self.y
         self.create_grid()
-        e_list= []
         for timeSlice in range(0, self.Nt):
-            f_real = RectBivariateSpline(old_x[int(start_x):int(end_x)], \
-                                         old_y[int(start_y):int(end_y)], \
-                                         self.e[0, :, :].real)
-            f_imag = RectBivariateSpline(old_x[int(start_x):int(end_x)], \
-                                         old_y[int(start_y):int(end_y)], \
-                                         self.e[0, :, :].imag)
+            f_real = RectBivariateSpline(old_x, old_y, self.e[0, :, :].real)
+            f_imag = RectBivariateSpline(old_x, old_y, self.e[0, :, :].imag)
             self.e= self.e[1:, :, :]
-            e_list.append(f_real(self.x, self.y)+ 1j* f_imag(self.x, self.y))
+            e_list.append((f_real(self.x, self.y).astype(np.float32)\
+                          + 1j* f_imag(self.x, self.y).astype(np.float32))\
+                          .astype(np.complex64))
         self.e= np.array(e_list)
-
     # Getters and setters
     #--------------------------------------------------------------------------
         
     def set_field(self, e):
         """ Set the value of the electric field. """
-        self.e = np.array(e, dtype='complex128')
+        self.e = np.array(e, dtype='complex64')
         self.save_field(self.e, self.z[-1])
         
     def get_dx(self):
@@ -611,7 +599,7 @@ class RadialPulse(Pulse):
         e = self.reconstruct_from_cyl(self.r, self.E, x, y)
         e = e[None, :, :] * np.exp(-t[:, None, None]**2 * np.pi/(2*tau**2))
         # Add the phi dependent phase
-        phi = np.zeros((Nx, Ny), dtype='complex128') 
+        phi = np.zeros((Nx, Ny), dtype='complex64') 
         # Handle when x/y -> ininity
         phi[int(Nx/2), int(Ny/2):] = np.pi/2
         phi[int(Nx/2), :int(Ny/2)] = -np.pi/2

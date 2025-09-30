@@ -11,6 +11,7 @@ from cupy.fft import fft, ifft, fft2, ifft2, fftshift, ifftshift, fftfreq
 from scipy import constants
 import matplotlib.pyplot as plt
 import numpy as np
+cp.fft.config.set_plan_cache_size(0)
 
 class propagation_GPU():
 
@@ -61,13 +62,17 @@ class propagation_GPU():
                 E_field = ifft(E_field, axis=0)
 
             if SPM_Kerr:
-                intensity = 0.5 * constants.c * constants.epsilon_0 * (cp.abs(E_field)*1e9)**2
-                E_field *= cp.exp(1j * I_to_phase * intensity)
+                #Intensity = (0.5 * constants.c * constants.epsilon_0 * (cp.abs(E_field)*1e9)**2) put it directly into phase to save GPU memory
+                E_field *= cp.exp(1j * I_to_phase * (0.5 * constants.c * constants.epsilon_0 * (cp.abs(E_field)*1e9)**2))
             
-            pulse.e = cp.asnumpy(E_field)
             if save:
+                pulse.e = cp.asnumpy(E_field)
                 pulse.save_field(pulse.e, z[s]+absStart, noteName= noteName)
                 pass
+                
+        pulse.e = cp.asnumpy(E_field)
         del E_field
+        cp._default_memory_pool.free_all_blocks()
+        cp.fft.config.clear_plan_cache()
 
 #        pulse.e = cp.asnumpy(E_field)  # Convert back to NumPy

@@ -83,7 +83,7 @@ class Laser(beam.Beam):
         """ Create the fftw plans. """
         threads = self.threads
         # Allocate space to carry out the fft's in
-        efft = pyfftw.empty_aligned((self.Nx, self.Ny), dtype='complex128')
+        efft = pyfftw.empty_aligned((self.Nx, self.Ny), dtype='complex64')
         self.fft = pyfftw.builders.fft2(efft, overwrite_input=True,
                                          avoid_copy=True, threads=threads)
         self.ifft = pyfftw.builders.ifft2(efft, overwrite_input=True, 
@@ -98,9 +98,9 @@ class Laser(beam.Beam):
             The array of field values to initialize the field to.
         """
         if e is None:
-            self.e = np.zeros((self.Nx, self.Ny), dtype='complex128')
+            self.e = np.zeros((self.Nx, self.Ny), dtype='complex64')
         else:
-            self.e = np.array(e, dtype='complex128')
+            self.e = np.array(e, dtype='complex64')
         self.saveInd = 0
         self.z = []
         self.save_field(self.e, 0.0)
@@ -123,7 +123,7 @@ class Laser(beam.Beam):
         
     def set_field(self, e):
         """ Set the value of the electric field. """
-        self.e = np.array(e, dtype='complex128')
+        self.e = np.array(e, dtype='complex64')
         self.save_field(self.e, self.z[-1])
         
     def get_dx(self):
@@ -245,7 +245,7 @@ class Laser(beam.Beam):
         elif axis== 1:
             Nk= self.Ny
             K= self.Y
-        e1 = np.zeros((Nz, Nk), dtype='complex128')
+        e1 = np.zeros((Nz, Nk), dtype='complex64')
         #TODO This now only works for 2D beam, set it so that it also works for cyl beam
         for i in range(int(Nz0), Nz):
             if axis== 0:
@@ -518,7 +518,7 @@ class GeneralGaussianLaser(Laser):
             e = E0 * w0 / wz * np.exp(-r2/wz**2) \
                  * np.exp(1j*(k*z0 + k*r2/(2*Rz) - psi))
         else:
-            e = np.array(E0 * np.exp(-r2/w0**2), dtype='complex128')
+            e = np.array(E0 * np.exp(-r2/w0**2), dtype='complex64')
         e *= np.exp(1j*k*theta*x)
         super().initialize_field(e)
 
@@ -635,7 +635,7 @@ class GeneralSuperGaussianLaser(Laser):
         x = self.x[:, None]
         y = self.y[None, :]
         r2 = (x-dx)**2 + y**2
-        e = np.array(E0 * np.exp(-(r2/w02)**n), dtype='complex128')
+        e = np.array(E0 * np.exp(-(r2/w02)**n), dtype='complex64')
         e *= np.exp(1j*k*theta*x)
         super().initialize_field(e)
 
@@ -676,7 +676,7 @@ class RadialLaser(Laser):
         Ny = self.Ny
         e = self.reconstruct_from_cyl(self.r, self.E, x, y)
         # Add the phi dependent phase
-        phi = np.zeros((Nx, Ny), dtype='complex128') 
+        phi = np.zeros((Nx, Ny), dtype='complex64') 
         # Handle when x/y -> ininity
         phi[int(Nx/2), int(Ny/2):] = np.pi/2
         phi[int(Nx/2), :int(Ny/2)] = -np.pi/2
