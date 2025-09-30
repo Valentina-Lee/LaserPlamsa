@@ -16,6 +16,7 @@ from scipy import constants
 import re
 import os
 from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import RectBivariateSpline
 
 class Pulse(beam.Beam):
     """ A laser pulse class that stores the field for each transverse slice.
@@ -144,20 +145,36 @@ class Pulse(beam.Beam):
         prefactor = (n0 * constants.epsilon_0 * constants.c / 2)
         E0 = np.sqrt(J / (prefactor * norm))
         self.e= E0* self.e *10**(4.5)
+    
+    def resize_beam(self, new_X, new_Y, new_Nx, new_Ny):
+        temp_Nx= (new_X/self.X)*self.Nx
+        temp_Ny= (new_Y/self.Y)*self.Ny
+        assert temp_Nx.is_integer(), 'New X need to be an integer times old x gird size'
+        assert temp_Ny.is_integer(), 'New Y need to be an integer times old x gird size'
+        start_x= (self.Nx-temp_Nx)//2
+        end_x= start_x+ temp_Nx
+        start_y= (self.Ny-temp_Ny)//2
+        end_y= start_y+ temp_Ny
+        self.e= self.e[:, int(start_x):int(end_x), int(start_y):int(end_y)]
+        self.X= new_X
+        self.Y= new_Y
+        self.Nx= new_Nx
+        self.Ny= new_Ny
+        old_x= self.x
+        old_y= self.y
+        self.create_grid()
+        e_list= []
+        for timeSlice in range(0, self.Nt):
+            f_real = RectBivariateSpline(old_x[int(start_x):int(end_x)], \
+                                         old_y[int(start_y):int(end_y)], \
+                                         self.e[0, :, :].real)
+            f_imag = RectBivariateSpline(old_x[int(start_x):int(end_x)], \
+                                         old_y[int(start_y):int(end_y)], \
+                                         self.e[0, :, :].imag)
+            self.e= self.e[1:, :, :]
+            e_list.append(f_real(self.x, self.y)+ 1j* f_imag(self.x, self.y))
+        self.e= np.array(e_list)
 
-#    def resize_beam(self, new_X, new_Y, new_Nx, new_Ny):
-#        f_real = RegularGridInterpolator((self.x, self.y), self.e[].real)
-#        f_imag = RegularGridInterpolator((self.x, self.y), self.e.imag)
-#        self.X= new_X
-#        self.Y= new_Y
-#        self.Nx= new_Nx
-#        self.Ny= new_Ny
-#        self.create_grid()
-#        start_x= (self.e.shape[1]-self.Nx)//2
-#        end_x= start_x+ self.Nx
-#        start_y= (self.e.shape[2]-self.Ny)//2
-#        end_y= start_y+ self.Ny
-#        self.e= f_real((self.x, self.y)) + 1j * f_imag((self.x, self.y))
     # Getters and setters
     #--------------------------------------------------------------------------
         
