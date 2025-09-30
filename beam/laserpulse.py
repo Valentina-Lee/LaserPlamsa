@@ -13,6 +13,9 @@ import matplotlib.pyplot as plt
 from numpy.fft import fftfreq, fftshift, fft2
 from optics import gaussian
 from scipy import constants
+import re
+import os
+from scipy.interpolate import RegularGridInterpolator
 
 class Pulse(beam.Beam):
     """ A laser pulse class that stores the field for each transverse slice.
@@ -109,9 +112,8 @@ class Pulse(beam.Beam):
         e : array-like, optional
             The array of field values to initialize the field to.
         """
-        e = beam.e[None, :, :]*gaussian.temporal_gaussian_envelope(pulse.t, tau*1e15)[:, None, None]
 
-        self.e = np.array(e, dtype='complex128')
+        self.e = np.array(beam.e[None, :, :]*gaussian.temporal_gaussian_envelope(pulse.t, tau*1e15)[:, None, None], dtype='complex128')
         self.saveInd = 0
         self.z = []
         self.save_field(self.e, 0.0)
@@ -142,7 +144,20 @@ class Pulse(beam.Beam):
         prefactor = (n0 * constants.epsilon_0 * constants.c / 2)
         E0 = np.sqrt(J / (prefactor * norm))
         self.e= E0* self.e *10**(4.5)
-        
+
+#    def resize_beam(self, new_X, new_Y, new_Nx, new_Ny):
+#        f_real = RegularGridInterpolator((self.x, self.y), self.e[].real)
+#        f_imag = RegularGridInterpolator((self.x, self.y), self.e.imag)
+#        self.X= new_X
+#        self.Y= new_Y
+#        self.Nx= new_Nx
+#        self.Ny= new_Ny
+#        self.create_grid()
+#        start_x= (self.e.shape[1]-self.Nx)//2
+#        end_x= start_x+ self.Nx
+#        start_y= (self.e.shape[2]-self.Ny)//2
+#        end_y= start_y+ self.Ny
+#        self.e= f_real((self.x, self.y)) + 1j * f_imag((self.x, self.y))
     # Getters and setters
     #--------------------------------------------------------------------------
         
@@ -438,6 +453,49 @@ class Pulse(beam.Beam):
             plt.tight_layout()
             plt.show()
 
+    def plot_propagation(self, axis= 'x', timeSlice= None, noteName='', xylim=None):
+        def extract_number(filename):
+            # Find the last group of digits in the filename
+            match = re.findall(r'\d+', filename)
+            return int(match[-1]) if match else -1          
+        
+        if timeSlice== None:
+            timeSlice= self.Nt//2
+        load_path= self.path+ 'beams/beam_'+ self.name + '/'
+        starter= self.name+ noteName
+        files = []
+        for filename in os.listdir(load_path):
+            if filename.startswith(starter):
+                files.append(filename)
+                
+        files_sorted = sorted(files, key=extract_number)
+        if axis== 'x':
+            propagation_result= np.zeros((self.Nx, len(files)))
+            count= 0
+            for file in files:
+                e= np.load(load_path+ file)
+                I = self.intensity_from_field(e)
+                propagation_result[:, count]= I[timeSlice, :, self.Ny//2]
+                count= count+1
+        if axis== 'y':
+            propagation_result= np.zeros((self.Ny, len(files)))
+            count= 0
+            for file in files:
+                e= np.load(load_path+ file)
+                I = self.intensity_from_field(e)
+                propagation_result[:, count]= I[timeSlice, self.Nx//2, :]
+                count= count+1       
+        
+        start_z= int(re.findall(r'\d+', files_sorted[0])[0])
+        end_z= int(re.findall(r'\d+', files_sorted[-1])[0])
+        z_grid= np.array(self.z[start_z:end_z+1])
+        plt.figure(figsize=(8, 2.5))
+        plt.pcolormesh(z_grid, getattr(self, axis), propagation_result)
+        plt.ylim(xylim)
+        plt.xlabel('z (m)')
+        plt.ylabel(axis+ ' (um)')
+        plt.colorbar(label= 'Intensity ($10^{14}$W/cm$^2$)')
+        
 
 class GaussianPulse(Pulse):
     """ A laser pulse class that creates a Gaussian electric field. 
