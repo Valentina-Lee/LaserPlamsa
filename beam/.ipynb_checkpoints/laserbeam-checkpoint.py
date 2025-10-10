@@ -41,8 +41,6 @@ class Laser(beam.Beam):
         The name of the beam, used for naming files and folders.
     load : bool
         Boolean specifying if we are loading an existing object.
-    threads : int
-        The number of processors to parallelize the fft over.
     cyl : bool
         Whether the beam is cylindrically symmetric or not. Controls whether
         the entire transverse field is saved or only a 1D slice.
@@ -55,7 +53,6 @@ class Laser(beam.Beam):
             'path',
             'name',
             'load',
-            'threads',
             'cyl']
     
     # Initialization functions
@@ -65,7 +62,6 @@ class Laser(beam.Beam):
         super().__init__(params)
         self.k = 2*np.pi / self.params['lam']
         # Create internal variables
-        self.create_fft()
         if self.load is False:
             self.create_grid()
             self.initialize_field()
@@ -79,15 +75,6 @@ class Laser(beam.Beam):
         self.y = np.linspace(-Y/2, Y/2, self.Ny, False, dtype='double')
         self.z = []
     
-    def create_fft(self):
-        """ Create the fftw plans. """
-        threads = self.threads
-        # Allocate space to carry out the fft's in
-        efft = pyfftw.empty_aligned((self.Nx, self.Ny), dtype='complex64')
-        self.fft = pyfftw.builders.fft2(efft, overwrite_input=True,
-                                         avoid_copy=True, threads=threads)
-        self.ifft = pyfftw.builders.ifft2(efft, overwrite_input=True, 
-                                           avoid_copy=True, threads=threads)
         
     def initialize_field(self, e=None):
         """ Create the array to store the electric field values in. 

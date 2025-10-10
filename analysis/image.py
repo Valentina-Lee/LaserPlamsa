@@ -19,6 +19,7 @@ from PIL import Image
 import glob
 import os
 import re
+import h5py
 
 PATH = ''
 
@@ -27,6 +28,8 @@ cal = {
 #    '17571186': 0.00220, # Rail cam, direct, pixel size
 #    '18085415': 0.03062, # NF
 #    '18085362': 0.0003495  # FF, pixel size
+#    'LI20_201': 0.067
+    'LI20_201': 0.0618
 }
 
 #NF = '18085415'
@@ -269,9 +272,14 @@ class IMAGE():
         """ Calculate the center of mass of the image. """
         return np.flip(ndimage.center_of_mass(self.data))
     
-    def center_mask(self, threshold):
+    def center_mask(self, threshold, plot= False):
         """ Calculate the centroid of a mask of the image. """
         mask = self.data > threshold
+        if plot== True:
+            plt.figure()
+            plt.pcolormesh(self.data)
+            plt.figure()
+            plt.pcolormesh(mask)
         return np.flip(ndimage.center_of_mass(mask))
     
     def center_fit(self, f, p0):
@@ -315,6 +323,7 @@ class IMAGE():
         end_y = start_y+self.height
         start_x = shift[0]
         end_x = start_x+self.width
+#        print(start_x, end_x)
         cen_image[start_y:end_y, start_x:end_x] = self.data
         return cen_image, center
     
@@ -603,8 +612,17 @@ class MatImage(IMAGE):
         self.path = PATH
         self.filename = "ProfMon-CAMR_{!s}-{!s}.mat".format(self.camera, self.dataset)
         name = self.path + self.filename
-        self.mat = scipy.io.loadmat(name)
-        image = Image.fromarray(self.mat['data'][0][0][1])
+        try:
+            self.mat = scipy.io.loadmat(name)            
+            image = Image.fromarray(self.mat['data'][0][0][1])
+        except NotImplementedError:
+            with h5py.File(name, 'r') as f:
+#                def printname(name):
+#                    print(name)
+#                f.visit(printname)
+                dataset = f['data/img']
+                arr = np.array(dataset)
+                image = Image.fromarray(arr)
         return image
     
     def get_image_meta(self):
@@ -616,15 +634,27 @@ class MatImage(IMAGE):
             The meta data dictionary contained in the tiff image.
         """
         # You can see the name of each field in the mat at mat['data'].dtype.names
-        mat_meta = self.mat['data'][0][0]
-        meta = {}
-        meta['Gain'] = 0.0
-        meta['Shutter'] = 0.0
-        meta['Offset'] = [mat_meta[10][0][0], mat_meta[11][0][0]]
-        meta['Dataset'] = self.dataset
-        meta['Shot number'] = self.shot
-        meta['Serial number'] = self.camera
-        meta['Pixel'] = [mat_meta[6][0][0], mat_meta[7][0][0]]
+        try:
+            mat_meta = self.mat['data'][0][0]            
+            meta = {}
+            meta['Gain'] = 0.0
+            meta['Shutter'] = 0.0
+            meta['Offset'] = [mat_meta[10][0][0], mat_meta[11][0][0]]
+            meta['Dataset'] = self.dataset
+            meta['Shot number'] = self.shot
+            meta['Serial number'] = self.camera
+            meta['Pixel'] = [mat_meta[6][0][0], mat_meta[7][0][0]]
+        except:
+            meta = {}
+            with h5py.File(self.path + self.filename, 'r') as f:
+                meta['Pixel'] = \
+                [np.array(f['data/nRow'])[0][0], np.array(f['data/nCol'])[0][0]]
+            meta['Gain'] = 0.0
+            meta['Shutter'] = 0.0
+            meta['Offset'] = [0, 0] #I put 0, 0 here because I don't think the new matlab file has offset
+            meta['Dataset'] = self.dataset
+            meta['Shot number'] = self.shot
+            meta['Serial number'] = self.camera
         return meta
 
 

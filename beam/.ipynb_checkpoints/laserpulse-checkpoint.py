@@ -3,7 +3,7 @@
 """
 Created on Thu Oct  5 09:15:01 2017
 
-@author: robert
+@author: robert, valentina
 """
 
 import pyfftw
@@ -163,6 +163,9 @@ class Pulse(beam.Beam):
                           + 1j* f_imag(self.x, self.y).astype(np.float32))\
                           .astype(np.complex64))
         self.e= np.array(e_list)
+
+#    def reshape_temporal(self):
+#        temporal_profile= np.sum(np.sum(abs(PSPulse.e)**2, axis= 1), axis= 1)
     # Getters and setters
     #--------------------------------------------------------------------------
         
@@ -463,7 +466,7 @@ class Pulse(beam.Beam):
             # Find the last group of digits in the filename
             match = re.findall(r'\d+', filename)
             return int(match[-1]) if match else -1          
-        
+        print('Starting...')
         if timeSlice== None:
             timeSlice= self.Nt//2
         load_path= self.path+ 'beams/beam_'+ self.name + '/'
@@ -472,20 +475,26 @@ class Pulse(beam.Beam):
         for filename in os.listdir(load_path):
             if filename.startswith(starter):
                 files.append(filename)
-                
+
         files_sorted = sorted(files, key=extract_number)
+        start_z= int(re.findall(r'\d+', files_sorted[0])[0])
+        end_z= int(re.findall(r'\d+', files_sorted[-1])[0])
+        z_grid= np.array(self.z[start_z:end_z+1])
+
         if axis== 'x':
-            propagation_result= np.zeros((self.Nx, len(files)))
+            propagation_result= np.zeros((self.Nx, len(files_sorted)))
             count= 0
-            for file in files:
+            for file in files_sorted:
+                print(file)
                 e= np.load(load_path+ file)
                 I = self.intensity_from_field(e)
                 propagation_result[:, count]= I[timeSlice, :, self.Ny//2]
                 count= count+1
         if axis== 'y':
-            propagation_result= np.zeros((self.Ny, len(files)))
+            propagation_result= np.zeros((self.Ny, len(files_sorted)))
             count= 0
-            for file in files:
+            for file in files_sorted:
+                print(file)
                 e= np.load(load_path+ file)
                 I = self.intensity_from_field(e)
                 propagation_result[:, count]= I[timeSlice, self.Nx//2, :]
@@ -494,12 +503,32 @@ class Pulse(beam.Beam):
         start_z= int(re.findall(r'\d+', files_sorted[0])[0])
         end_z= int(re.findall(r'\d+', files_sorted[-1])[0])
         z_grid= np.array(self.z[start_z:end_z+1])
+        z_grid= np.array(self.z)
+        
         plt.figure(figsize=(8, 2.5))
         plt.pcolormesh(z_grid, getattr(self, axis), propagation_result)
         plt.ylim(xylim)
         plt.xlabel('z (m)')
         plt.ylabel(axis+ ' (um)')
         plt.colorbar(label= 'Intensity ($10^{14}$W/cm$^2$)')
+        plt.twinx()
+        plt.plot(z_grid, propagation_result[int(propagation_result.shape[0]//2), :], \
+                'w--')
+        return z_grid, getattr(self, axis), propagation_result
+
+    def plot_propagation_array(self, propagation_result, axis= 'x', xylim= None):
+        z_grid= np.array(self.z)
+        
+        plt.figure(figsize=(8, 2.5))
+        plt.pcolormesh(z_grid, getattr(self, axis), propagation_result)
+        plt.ylim(xylim)
+        plt.xlabel('z (m)')
+        plt.ylabel(axis+ ' (um)')
+        plt.colorbar(label= 'Intensity ($10^{14}$W/cm$^2$)')
+        plt.twinx()
+        plt.plot(z_grid, propagation_result[int(propagation_result.shape[0]//2), :], \
+                'w--')
+        
         
 
 class GaussianPulse(Pulse):
