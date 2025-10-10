@@ -24,7 +24,7 @@ class plasmaIonization():
         '''
         Calculate n_gas-1
         '''
-        return gas.alpha* 6.283e-07-1
+        return gas.alpha* 6.283e-07
 
     def adk_rate_linear(Eavg, gas):
         w = plasmaIonization.adk_rate_static(gas.EI, Eavg, gas.Z, gas.l, gas.m)

@@ -111,20 +111,19 @@ class propagation_GPU():
         'Nx and/or Ny in pulse and plasma do not match'
 
         E_field = cp.array(pulse.e)
-        lam = pulse.lam*1e-6 #convert to m
-        x= pulse.x*1e-6 #convert to m
-        y= pulse.y*1e-6 #convert to m
-        t= pulse.t*1e-15 #convert to s
-        z= plasma.z*1e-6 #convert to m
+        lam = cp.array(pulse.lam*1e-6) #convert to m
+        x= cp.array(pulse.x*1e-6) #convert to m
+        y= cp.array(pulse.y*1e-6) #convert to m
+        t= cp.array(pulse.t*1e-15) #convert to s
+        z= cp.array(plasma.z*1e-6) #convert to m
         k0 = 2 * cp.pi * 1 / lam
         dx = x[1] - x[0]
         dy = y[1] - y[0]
         dt = t[1] - t[0]
-        
+        dz = z[1]- z[0]
         
         #n and ne are in 1e17
         z_steps= plasma.Nz
-        dz = z[1]- z[0]
         kx = 2 * cp.pi * (fftfreq(pulse.Nx, dx))
         ky = 2 * cp.pi * (fftfreq(pulse.Ny, dy))
         KX, KY = cp.meshgrid(kx, ky, indexing='ij')
