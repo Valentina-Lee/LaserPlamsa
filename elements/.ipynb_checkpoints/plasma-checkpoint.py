@@ -168,6 +168,7 @@ class Plasma(element.Element):
         """ Save the plasma density to file at the given z ind. """
         if self.cyl:
             ne = ne[:, int(self.Ny/2)]
+            print('in cyl for some reason!')
         np.save(self.filePre + '_plasmaDensity_' + str(ind) + '.npy', ne)
     
     def save_num_density(self, n, ind):
@@ -338,7 +339,7 @@ class Plasma(element.Element):
         z_grid= np.array(self.z)*1e-6
         
         plt.figure(figsize=(8, 2.5))
-        plt.pcolormesh(z_grid, getattr(self, axis), propagation_result*10, cmap= 'plasma')
+        plt.pcolormesh(z_grid, getattr(self, axis)*1e6, propagation_result*10, cmap= 'plasma')
         plt.ylim(xylim)
         plt.xlabel('z (m)')
         plt.ylabel(axis+ ' (um)')

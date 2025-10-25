@@ -17,6 +17,8 @@ import re
 import os
 from scipy.interpolate import RegularGridInterpolator
 from scipy.interpolate import RectBivariateSpline
+import time
+import gc
 
 class Pulse(beam.Beam):
     """ A laser pulse class that stores the field for each transverse slice.
@@ -61,6 +63,7 @@ class Pulse(beam.Beam):
             'Y',
             'T',
             'lam',
+            'tau',
             'path',
             'name',
             'load',
@@ -104,7 +107,7 @@ class Pulse(beam.Beam):
         self.z = []
         self.save_field(self.e, 0.0)
         
-    def initialize_field_TwoToThreeD(self, beam, pulse, tau):
+    def initialize_field_TwoToThreeD(self, beam):
         """ Create the array to store the electric field values in. 
         When given a laser profile and pulse tau, create a pulse.
         
@@ -114,7 +117,7 @@ class Pulse(beam.Beam):
             The array of field values to initialize the field to.
         """
 
-        self.e = np.array(beam.e[None, :, :]*gaussian.temporal_gaussian_envelope(pulse.t, tau*1e15)[:, None, None], dtype='complex64')
+        self.e = np.array(beam.e[None, :, :]*gaussian.temporal_gaussian_envelope(self.t, self.tau).astype(np.float32)[:, None, None], dtype='complex64')
         self.saveInd = 0
         self.z = []
         self.save_field(self.e, 0.0)
@@ -140,13 +143,16 @@ class Pulse(beam.Beam):
         """
         dx = (self.x[1] - self.x[0])
         dy = (self.y[1] - self.y[0])
-        dt = (self.t[1] - self.t[0])
+        try:
+            dt = (self.t[1] - self.t[0])
+        except:
+            dt=1
         norm = np.sum(np.abs(self.e)**2) * dx * dy * dt
         prefactor = (n0 * constants.epsilon_0 * constants.c / 2)
         E0 = np.sqrt(J / (prefactor * norm))
         self.e= (E0* self.e *10**(4.5)).astype(np.complex64)
 
-    def resize_beam(self, new_X, new_Y, new_Nx, new_Ny):
+    def resize_beam_old(self, new_X, new_Y, new_Nx, new_Ny):
         e_list= []
         self.X= new_X
         self.Y= new_Y
@@ -163,6 +169,66 @@ class Pulse(beam.Beam):
                           + 1j* f_imag(self.x, self.y).astype(np.float32))\
                           .astype(np.complex64))
         self.e= np.array(e_list)
+        
+    def resize_beam(self, new_X, new_Y, new_Nx, new_Ny):
+        e_list= []
+        self.X= new_X
+        self.Y= new_Y
+        self.Nx= new_Nx
+        self.Ny= new_Ny
+        old_x= self.x
+        old_y= self.y
+        self.create_grid()
+        for timeSlice in range(0, self.Nt):
+            f_amp = RectBivariateSpline(old_x, old_y, abs(self.e[0, :, :]), kx=1, ky=1, s=0.0)
+            f_phase = RectBivariateSpline(old_x, old_y, \
+                                    np.unwrap(np.unwrap(np.angle(self.e[0, :, :]), axis=0), axis=1))
+            self.e= self.e[1:, :, :]
+            e_list.append((f_amp(self.x, self.y).astype(np.float32)*\
+                           np.exp(1j* f_phase(self.x, self.y).astype(np.float32)))
+                          .astype(np.complex64))
+        self.e= np.array(e_list)
+
+    def resize_beam_test(self, new_X, new_Y, new_Nx, new_Ny):
+        assert new_X/self.X<1 and new_Y/self.Y < 1, 'New beam needs to be smaller to use this function'
+
+        crop_Nx= self.Nx*new_X//self.X+1
+        crop_Nx += crop_Nx % 2
+        crop_Ny= self.Nx*new_Y//self.Y+1
+        crop_Ny += crop_Nx % 2
+        ix0 = int((self.Nx - crop_Nx) // 2)
+        iy0 = int((self.Ny - crop_Ny) // 2)
+        ix1 = int(ix0 + crop_Nx)
+        iy1 = int(iy0 + crop_Ny)
+
+        old_x = self.x[ix0:ix1]
+        old_y = self.y[iy0:iy1]
+        copy  = np.ascontiguousarray(self.e[:, ix0:ix1, iy0:iy1])  
+        del self.e
+        time.sleep(3)
+        
+        self.X= new_X
+        self.Y= new_Y
+        self.Nx= new_Nx
+        self.Ny= new_Ny
+        self.create_grid()
+        amp= abs(copy).astype(np.float32)
+        phase= np.unwrap(np.unwrap(np.unwrap(np.angle(copy), \
+                                             axis=0), axis=1), axis=2).astype(np.float32)
+        del copy
+        time.sleep(3)
+        interp_func_amp = RegularGridInterpolator(\
+            (self.t, old_x, old_y), amp, bounds_error=False, fill_value=0.0)
+        interp_func_phase = RegularGridInterpolator(\
+            (self.t, old_x, old_y), phase, \
+            bounds_error=False, fill_value=0.0)
+        Tq, Xq, Yq = np.meshgrid(self.t, self.x, self.y, indexing='ij') 
+        points = np.stack([Tq.ravel(), Xq.ravel(), Yq.ravel()], axis=-1).astype(np.float32) 
+        del Tq, Xq, Yq
+        self.e = (interp_func_amp(points).astype(np.float32) *\
+                 np.exp(1j * interp_func_phase(points).astype(np.float32))\
+                  ).reshape(len(self.t), new_Nx, new_Ny).astype(np.complex64)
+        
 
 #    def reshape_temporal(self):
 #        temporal_profile= np.sum(np.sum(abs(PSPulse.e)**2, axis= 1), axis= 1)
@@ -196,7 +262,29 @@ class Pulse(beam.Beam):
         fx = fftfreq(self.Nx, dx)
         fy = fftfreq(self.Ny, dy)
         return fx, fy
-    
+
+    def get_chromatic_components(self, tau, num_comp):
+        dfreq= 0.44/tau/np.sqrt(2)
+        dlam= (self.lam*1e-6)**2/constants.c*dfreq
+        lam_min= self.lam*1e-6- 0.4*dlam
+        lam_max= self.lam*1e-6+ 0.4*dlam
+        print(lam_min, lam_max)
+        lam= np.linspace(lam_min, lam_max, num_comp)
+        amp = np.exp(-4*np.log(2) * ((lam - self.lam*1e-6)**2) / (dlam**2))
+        amp= amp/np.sum(amp)
+        return lam, amp
+
+    def get_chromoatic_freq(self):
+        dt= (self.t*1e-15)[1]-(self.t*1e-15)[0]
+        f_rev= fftfreq(self.Nt, dt)
+        f0= constants.c/(self.lam*1e-6)
+        f_abs= f0+f_rev
+        dfreq= 0.44/(self.tau*1e-15)
+        amp= np.exp(-2*np.log(2)*((f_abs - f0)**2) / (dfreq**2))
+        amp= amp/np.sum(amp)
+        self.f_abs= f_abs
+        self.f_amp= amp
+        
     # File managment
     #--------------------------------------------------------------------------
         
@@ -247,7 +335,10 @@ class Pulse(beam.Beam):
         I = self.intensity_from_field(self.e)
         dx = self.x[1] - self.x[0]
         dy = self.y[1] - self.y[0]
-        dt = self.t[1] - self.t[0]
+        try:
+            dt = self.t[1] - self.t[0]
+        except:
+            dt=1
         return np.sum(I)*dt*dx*dy*1e-9
         
     

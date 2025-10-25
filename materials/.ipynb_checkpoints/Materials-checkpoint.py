@@ -21,7 +21,7 @@ class materials:
         "CaF2": {
             "n0": 1.43,             # linear refractive index at 800 nm
             "beta2": 41.283e-33,        # GVD (s^2/m) at 800nm
-#            "n2": 10e-20           # nonlinear refractive index (m^2/W)
+#            "n2": 0.8e-20           # nonlinear refractive index (m^2/W)
             "n2": 1.71e-20           # nonlinear refractive index (m^2/W)
         },
         "FusedSilica": {
